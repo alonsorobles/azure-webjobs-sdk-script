@@ -36,13 +36,7 @@ namespace WebJobs.Script.Cli.Verbs
         public WebVerb(ITipsManager tipsManager)
             : base(tipsManager)
         {
-            ConfigureDefaultEnvironmentVariables();
             ReadSecrets();
-        }
-
-        private static void ConfigureDefaultEnvironmentVariables()
-        {
-            //Environment.SetEnvironmentVariable("EDGE_NODE_PARAMS", "--debug", EnvironmentVariableTarget.Process);
         }
 
         public override async Task RunAsync()
@@ -56,6 +50,7 @@ namespace WebJobs.Script.Cli.Verbs
             };
 
             var settings = SelfHostWebHostSettingsFactory.Create();
+            Environment.SetEnvironmentVariable("EDGE_NODE_PARAMS", $"--debug={settings.NodeDebugPort}", EnvironmentVariableTarget.Process);
 
             WebApiConfig.Register(config, settings);
 

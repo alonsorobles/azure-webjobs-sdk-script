@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Azure.WebJobs.Script.WebHost.Models;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -28,7 +29,7 @@ namespace WebJobs.Script.Cli.Helpers
     {
         const int Retries = 20;
 
-        static readonly string LaunchJsonPath = Path.Combine(Environment.CurrentDirectory, "launch.json");
+        static readonly string LaunchJsonPath = Path.Combine(Environment.CurrentDirectory, ".vscode", "launch.json");
 
         public static async Task<bool> AttachManagedAsync(HttpClient server)
         {
@@ -36,54 +37,67 @@ namespace WebJobs.Script.Cli.Helpers
             return response.IsSuccessStatusCode;
         }
 
-        public static async Task<NodeDebuggerStatus> TryAttachNodeAsync(int processId)
+        private static async Task<int> GetNodeDebuggerPort(HttpClient server)
         {
-            var tryCount = 0;
-            while (tryCount < Retries)
+            var response = await server.GetAsync("admin/host/status");
+            if (response.IsSuccessStatusCode)
             {
-                var hostProcess = Process.GetProcessById(processId);
-                if (hostProcess != null)
-                {
-                    var nodeProcess = hostProcess.GetChildren().FirstOrDefault(p => p.ProcessName == "node");
-                    if (nodeProcess == null)
-                    {
-                        await Task.Delay(200);
-                    }
-                    else
-                    {
-                        var launchJson = $@"
+                var status = await response.Content.ReadAsAsync<HostStatus>();
+                return status.WebHostSettings.NodeDebugPort;
+            }
+            else
+            {
+                return -1;
+            }
+        }
+
+        public static async Task<NodeDebuggerStatus> TryAttachNodeAsync(HttpClient server)
+        {
+            var nodeDebugPort = await GetNodeDebuggerPort(server);
+            if (nodeDebugPort == -1)
+            {
+                return NodeDebuggerStatus.Error;
+            }
+
+            var launchJson = $@"
 {{
     ""version"": ""0.2.0"",
     ""configurations"": [
         {{
-            ""name"": ""Attach to Process"",
+            ""name"": ""Attach to Azure Functions"",
             ""type"": ""node"",
             ""request"": ""attach"",
-            ""processId"": ""{nodeProcess.Id}"",
-            ""port"": 5858,
-            ""sourceMaps"": false,
-            ""outDir"": null
+            ""port"": {nodeDebugPort}
         }}
     ]
 }}";
-                        var existingLaunchJson = await(FileSystemHelpers.FileExists(LaunchJsonPath)
-                            ? Utilities.SafeGuardAsync(async () => JsonConvert.DeserializeObject<JObject>(await FileSystemHelpers.ReadAllTextFromFileAsync(LaunchJsonPath)))
-                            : Task.FromResult<JObject>(null));
 
-                        if (existingLaunchJson == null ||
-                            existingLaunchJson["configurations"]?["processId"]?.ToString() != nodeProcess.Id.ToString())
-                        {
-                            await FileSystemHelpers.WriteAllTextToFileAsync(LaunchJsonPath, launchJson);
-                            return NodeDebuggerStatus.Created;
-                        }
-                        else if (existingLaunchJson["configurations"]?["processId"]?.ToString() == nodeProcess.Id.ToString())
-                        {
-                            return NodeDebuggerStatus.AlreadyCreated;
-                        }
-                    }
-                }
+            var existingLaunchJson = await (FileSystemHelpers.FileExists(LaunchJsonPath)
+                ? Utilities.SafeGuardAsync(async () => JsonConvert.DeserializeObject<JObject>(await FileSystemHelpers.ReadAllTextFromFileAsync(LaunchJsonPath)))
+                : Task.FromResult<JObject>(null));
+
+            FileSystemHelpers.CreateDirectory(Path.GetDirectoryName(LaunchJsonPath));
+
+            if (existingLaunchJson == null)
+            {
+                await FileSystemHelpers.WriteAllTextToFileAsync(LaunchJsonPath, launchJson);
+                return NodeDebuggerStatus.Created;
             }
-            return NodeDebuggerStatus.Error;
+            var functionsDebugConfig = existingLaunchJson["configurations"]?.FirstOrDefault(e => e["name"].ToString() == "Attach to Azure Functions");
+
+            if (functionsDebugConfig?["port"]?.ToString() != nodeDebugPort.ToString())
+            {
+                await FileSystemHelpers.WriteAllTextToFileAsync(LaunchJsonPath, launchJson);
+                return NodeDebuggerStatus.Created;
+            }
+            else if (functionsDebugConfig?["port"]?.ToString() == nodeDebugPort.ToString())
+            {
+                return NodeDebuggerStatus.AlreadyCreated;
+            }
+            else
+            {
+                return NodeDebuggerStatus.Error;
+            }
         }
     }
 }

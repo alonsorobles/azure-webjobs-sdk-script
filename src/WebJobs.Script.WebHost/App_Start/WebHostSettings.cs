@@ -19,5 +19,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost
 
         [JsonProperty("secretsPath")]
         public string SecretsPath { get; set; }
+
+        [JsonProperty("nodeDebugPort")]
+        public int NodeDebugPort { get; set; }
     }
 }

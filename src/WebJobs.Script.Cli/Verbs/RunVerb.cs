@@ -106,11 +106,11 @@ namespace WebJobs.Script.Cli.Verbs
                             .WriteLine(ErrorColor("Unable to read function config"));
                         return;
                     }
-                    else if (scriptType != null && scriptType != ScriptType.CSharp)
+                    else if (scriptType != null && scriptType != ScriptType.CSharp && scriptType != ScriptType.Javascript)
                     {
                         ColoredConsole
                             .Error
-                            .WriteLine(ErrorColor($"Only C# functions are supported for debugging at the moment."));
+                            .WriteLine(ErrorColor($"Only C# and Javascript functions are supported for debugging at the moment."));
                         return;
                     }
 
@@ -121,23 +121,23 @@ namespace WebJobs.Script.Cli.Verbs
                             .WriteLine("Setup your break points, and hit continue!");
                         await DebuggerHelper.AttachManagedAsync(client);
                     }
-                    //else if (scriptType == ScriptType.Javascript)
-                    //{
-                    //    var nodeDebugger = await DebuggerHelper.TryAttachNodeAsync(hostStatus.ProcessId);
-                    //    if (nodeDebugger == NodeDebuggerStatus.Error)
-                    //    {
-                    //        ColoredConsole
-                    //            .Error
-                    //            .WriteLine(ErrorColor("Unable to configure node debugger."));
-                    //        return;
-                    //    }
-                    //    else if (nodeDebugger == NodeDebuggerStatus.Created)
-                    //    {
-                    //        ColoredConsole
-                    //        .Write("launch.json configured. Setup your break points, and press any key to continue!");
-                    //        Console.ReadKey();
-                    //    }
-                    //}
+                    else if (scriptType == ScriptType.Javascript)
+                    {
+                        var nodeDebugger = await DebuggerHelper.TryAttachNodeAsync(client);
+                        if (nodeDebugger == NodeDebuggerStatus.Error)
+                        {
+                            ColoredConsole
+                                .Error
+                                .WriteLine(ErrorColor("Unable to configure node debugger. Check your launch.json."));
+                            return;
+                        }
+                        else if (nodeDebugger == NodeDebuggerStatus.Created || nodeDebugger == NodeDebuggerStatus.AlreadyCreated)
+                        {
+                            ColoredConsole
+                            .Write("launch.json configured. Setup your break points, launch debugger (F5), and press any key to continue...");
+                            Console.ReadKey();
+                        }
+                    }
                 }
 
                 var invocation = string.IsNullOrEmpty(FileName)

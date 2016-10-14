@@ -3,6 +3,8 @@
 
 using System;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Azure.WebJobs.Script.WebHost;
 
 namespace WebJobs.Script.Cli.Common
@@ -16,8 +18,23 @@ namespace WebJobs.Script.Cli.Common
                 IsSelfHost = true,
                 ScriptPath = Path.Combine(Environment.CurrentDirectory),
                 LogPath = Path.Combine(Path.GetTempPath(), @"LogFiles\Application\Functions"),
-                SecretsPath = Path.Combine(Environment.CurrentDirectory, "secrets", "functions", "secrets")
+                SecretsPath = Path.Combine(Environment.CurrentDirectory, "secrets", "functions", "secrets"),
+                NodeDebugPort = GetAvailablePort()
             };
+        }
+
+        private static int GetAvailablePort()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            try
+            {
+                listener.Start();
+                return ((IPEndPoint)listener.LocalEndpoint).Port;
+            }
+            finally
+            {
+                listener.Stop();
+            }
         }
     }
 }
